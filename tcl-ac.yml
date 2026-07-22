@@ -129,7 +129,7 @@ switch:
     turn_off_action:
       - climate.control:
           id: tcl_custom_climate
-          mode: OFF
+          mode: "OFF"
 
 select:
   - platform: template

@@ -7,10 +7,11 @@ esp8266:
 external_components:
   - source:
       type: git
-      url: https://github.com/lNikazzzl/tcl_ac_esphome
-    components: [tcl_climate]
-#  or local
-#  - source: components
+      url: https://github.com/spasemice/tcl_ac_esphome
+      ref: master
+    components:
+      - tcl_climate
+    refresh: 1h
 
 wifi:
   ssid: !secret wifi_ssid
@@ -19,7 +20,8 @@ wifi:
 api:
 
 ota:
-  password: 123
+  - platform: esphome
+    password: !secret ota
 
 uart:
   id: uart_bus
@@ -36,7 +38,7 @@ climate:
   - platform: tcl_climate
     id: tcl_custom_climate
     uart_id: uart_bus
-    name: "HAVC TCL"
+    name: "HVAC TCL"
 
 select:
   - platform: template

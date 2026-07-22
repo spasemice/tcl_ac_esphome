@@ -1,8 +1,13 @@
 esphome:
-  name: tcl-ac
+  name: teslaac
+  friendly_name: TeslaAC
 
 esp8266:
-  board: esp07
+  board: d1_mini
+  restore_from_flash: true
+
+preferences:
+  flash_write_interval: 1min
 
 external_components:
   - source:
@@ -11,17 +16,29 @@ external_components:
       ref: master
     components:
       - tcl_climate
-    refresh: 1h
+    refresh: 0s
+
+api:
+  # encryption:
+  #   key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-api:
+  ap:
+    ssid: "Teslaac Hotspot"
+    password: "88888888"
 
-ota:
-  - platform: esphome
-    password: !secret ota
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
 
 uart:
   id: uart_bus
@@ -34,17 +51,92 @@ logger:
   level: VERBOSE
   baud_rate: 0
 
+globals:
+  - id: tesla_last_mode
+    type: uint8_t
+    restore_value: true
+    initial_value: "1"
+
 climate:
   - platform: tcl_climate
     id: tcl_custom_climate
     uart_id: uart_bus
-    name: "HVAC TCL"
+    name: "Tesla AC"
+
+    on_state:
+      - lambda: |-
+          uint8_t new_mode = id(tesla_last_mode);
+
+          switch (x.mode) {
+            case climate::CLIMATE_MODE_COOL:
+              new_mode = 1;
+              break;
+            case climate::CLIMATE_MODE_HEAT:
+              new_mode = 2;
+              break;
+            case climate::CLIMATE_MODE_DRY:
+              new_mode = 3;
+              break;
+            case climate::CLIMATE_MODE_FAN_ONLY:
+              new_mode = 4;
+              break;
+            case climate::CLIMATE_MODE_AUTO:
+              new_mode = 5;
+              break;
+            case climate::CLIMATE_MODE_OFF:
+            default:
+              break;
+          }
+
+          if (new_mode != id(tesla_last_mode)) {
+            id(tesla_last_mode) = new_mode;
+          }
+
+switch:
+  - platform: template
+    id: tesla_ac_power_last_state
+    name: "Tesla AC Power - Last State"
+    icon: "mdi:air-conditioner"
+
+    lambda: |-
+      return id(tcl_custom_climate).mode != climate::CLIMATE_MODE_OFF;
+
+    turn_on_action:
+      - lambda: |-
+          auto call = id(tcl_custom_climate).make_call();
+
+          switch (id(tesla_last_mode)) {
+            case 2:
+              call.set_mode(climate::CLIMATE_MODE_HEAT);
+              break;
+            case 3:
+              call.set_mode(climate::CLIMATE_MODE_DRY);
+              break;
+            case 4:
+              call.set_mode(climate::CLIMATE_MODE_FAN_ONLY);
+              break;
+            case 5:
+              call.set_mode(climate::CLIMATE_MODE_AUTO);
+              break;
+            case 1:
+            default:
+              call.set_mode(climate::CLIMATE_MODE_COOL);
+              break;
+          }
+
+          call.perform();
+
+    turn_off_action:
+      - climate.control:
+          id: tcl_custom_climate
+          mode: OFF
 
 select:
   - platform: template
-    name: Vertical swing
+    name: "Vertical Swing"
     id: vswing
     entity_category: config
+    optimistic: true
     options:
       - "Last position"
       - "Fix top"
@@ -56,14 +148,14 @@ select:
       - "Move upper"
       - "Move lower"
     set_action:
-      then:
-        lambda: |-
+      - lambda: |-
           id(tcl_custom_climate).control_vertical_swing(x);
 
   - platform: template
-    name: Horizontal swing
+    name: "Horizontal Swing"
     id: hswing
     entity_category: config
+    optimistic: true
     options:
       - "Last position"
       - "Fix left"
@@ -76,6 +168,5 @@ select:
       - "Move mid"
       - "Move right"
     set_action:
-      then:
-        lambda: |-
+      - lambda: |-
           id(tcl_custom_climate).control_horizontal_swing(x);
